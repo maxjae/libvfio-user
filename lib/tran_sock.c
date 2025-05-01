@@ -970,6 +970,9 @@ void* run_vsock_app(void *arg)
 #define WRITE_DOORBELL_OFFSET 1
 #define DOORBELL_SIZE 1  // 1 byte for each doorbell
 #define TOTAL_DOORBELL_SIZE (DOORBELL_SIZE * 2)
+#define MMIO_REGION_SIZE (sizeof(struct guest_message_header)) // there is either a header or a memory operand (here max. 8 Byte) in MMIO region
+#define DMA_PROXY_ADDRESS_OFFSET (((TOTAL_DOORBELL_SIZE + MMIO_REGION_SIZE + 7) >> 3) << 3) // 8 Byte aligned
+#define DMA_REGION_OFFSET (1 << 12) // 4K aligned
 
 static void *shmem = NULL;
 static volatile uint8_t *read_doorbell = NULL;
@@ -1023,6 +1026,10 @@ static int init_shared_memory() {
     // Initialize doorbells to 0
     *read_doorbell = 0;
     *write_doorbell = 0;
+
+    // write DMA address into shmem
+    *((uint64_t *)(shmem + DMA_PROXY_ADDRESS_OFFSET)) = (uint64_t) shmem + DMA_REGION_OFFSET;
+
     msync(shmem, TOTAL_DOORBELL_SIZE, MS_SYNC);
     
     return 0;

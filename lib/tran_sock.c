@@ -49,6 +49,7 @@
 #include <string.h>
 
 #include "tran_sock.h"
+#include "dma.h"
 
 typedef struct {
     int listen_fd;
@@ -973,6 +974,7 @@ void* run_vsock_app(void *arg)
 #define MMIO_REGION_SIZE (sizeof(struct guest_message_header)) // there is either a header or a memory operand (here max. 8 Byte) in MMIO region
 #define DMA_PROXY_ADDRESS_OFFSET (((TOTAL_DOORBELL_SIZE + MMIO_REGION_SIZE + 7) >> 3) << 3) // 8 Byte aligned
 #define DMA_REGION_OFFSET (1 << 12) // 4K aligned
+#define DMA_SIZE (SHMEM_SIZE - DMA_REGION_OFFSET)
 
 static void *shmem = NULL;
 static volatile uint8_t *read_doorbell = NULL;
@@ -1090,6 +1092,40 @@ static int wait_and_read_data(void *buf, size_t count) {
     return read_bytes;
 }
 
+// registers the mapped dma region as an "official" dma region to use for the emulated device
+static int disagg_setup_dma_region(struct vfu_ctx *vctx) {
+    int ret;
+    vfu_dma_info_t info;
+
+    ret = dma_controller_add_region(vctx->dma, (void *) (shmem + DMA_REGION_OFFSET),
+				  DMA_SIZE, -1, 0,
+				  PROT_READ | PROT_WRITE);
+
+    if (ret < 0) {
+	vfu_log(vctx, LOG_ERR, "failed to add DMA region");
+	return ERROR_INT(ret);
+    }
+
+
+    // Now register the region to tell where it is mapped to
+    // (this means we woudln't actually need to share the virtual address,
+    // and could do it more simple, because we share the same address twice)
+    info.iova.iov_base = shmem + DMA_REGION_OFFSET; // guest DMA address
+    info.iova.iov_len = DMA_SIZE;
+    info.vaddr = shmem + DMA_REGION_OFFSET; // mapped address
+    info.mapping.iov_base = shmem + DMA_REGION_OFFSET;
+    info.mapping.iov_len = DMA_SIZE;
+    info.page_size = 1 << 12;
+    info.prot = PROT_READ | PROT_WRITE; // same as in mmap call
+
+    if (vctx->dma_register != NULL) {
+	vctx->dma_register(vctx, &info);
+    }
+
+    return 0;
+}
+
+
 void *run_shmem_app(void* arg) {
     if (init_shared_memory() < 0) {
         printf("SHMEM: init_shared_memory failed\n");
@@ -1097,6 +1133,10 @@ void *run_shmem_app(void* arg) {
     }
 
     disagg_pci_dev_info *vsock_pci_info = (disagg_pci_dev_info*) arg;
+
+    if (disagg_setup_dma_region(vsock_pci_info->vctx) < 0) {
+	printf("SHMEM: disagg_setup_dma_region failed\n");
+    }
 
     printf("tran_sock.c: In shmem app: vfu_ctx: uuid: %s\n", vsock_pci_info->vctx->uuid);
 

@@ -4,6 +4,7 @@ client_sources = [
     '../lib/migration.c',
     '../lib/tran.c',
     '../lib/tran_sock.c',
+    '../lib/dma.c',
 ]
 
 client_deps = [

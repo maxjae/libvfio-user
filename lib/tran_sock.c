@@ -1093,8 +1093,9 @@ static int wait_and_read_data(void *buf, size_t count) {
 }
 
 // registers the mapped dma region as an "official" dma region to use for the emulated device
-static int disagg_setup_dma_region(struct vfu_ctx *vctx) {
+static int disagg_register_dma_region(struct vfu_ctx *vctx) {
     int ret;
+    dma_controller_t *dma_contr = vctx->dma;
     vfu_dma_info_t info;
 
     ret = dma_controller_add_region(vctx->dma, (void *) (shmem + DMA_REGION_OFFSET),
@@ -1104,6 +1105,17 @@ static int disagg_setup_dma_region(struct vfu_ctx *vctx) {
     if (ret < 0) {
 	vfu_log(vctx, LOG_ERR, "failed to add DMA region");
 	return ERROR_INT(ret);
+    }
+
+    // search for our region in the dma controller's regions to add information about the mapping
+    dma_memory_region_t *region = NULL;
+    for (int i = 0; i < dma_contr->nregions; ++i) {
+	if (dma_contr->regions[i].info.iova.iov_base == (void *) (shmem + DMA_REGION_OFFSET)) {
+	    region = &(dma_contr->regions[i]);
+	    region->info.vaddr = (void *) (shmem + DMA_REGION_OFFSET);
+	    region->info.mapping.iov_base = (void *) (shmem + DMA_REGION_OFFSET);
+	    region->info.mapping.iov_len = DMA_SIZE;
+	}
     }
 
 
@@ -1134,7 +1146,7 @@ void *run_shmem_app(void* arg) {
 
     disagg_pci_dev_info *vsock_pci_info = (disagg_pci_dev_info*) arg;
 
-    if (disagg_setup_dma_region(vsock_pci_info->vctx) < 0) {
+    if (disagg_register_dma_region(vsock_pci_info->vctx) < 0) {
 	printf("SHMEM: disagg_setup_dma_region failed\n");
     }
 

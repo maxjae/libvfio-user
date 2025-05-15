@@ -5,11 +5,13 @@ client_sources = [
     '../lib/tran.c',
     '../lib/tran_sock.c',
     '../lib/dma.c',
+    '../lib/sec_disagg.c',
 ]
 
 client_deps = [
     json_c_dep,
     thread_dep,
+    openssl_dep,
 ]
 
 client = executable(

@@ -12,6 +12,7 @@ libvfio_user_sources = [
     'pci_caps.c',
     'tran.c',
     'tran_sock.c',
+    'sec_disagg.c',
 ]
 
 if opt_tran_pipe
@@ -20,7 +21,7 @@ if opt_tran_pipe
 endif
 
 libvfio_user_deps = [
-    json_c_dep,
+    json_c_dep, openssl_dep,
 ]
 
 libvfio_user = library(

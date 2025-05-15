@@ -30,6 +30,8 @@ else
     rpathdir = libdir
 endif
 
+openssl_dep = dependency('openssl', method : 'pkg-config')
+
 thread_dep = dependency('threads')
 dl_dep = cc.find_library('dl', required: true)
 

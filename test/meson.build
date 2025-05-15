@@ -35,12 +35,14 @@ unit_tests_sources = [
     '../lib/tran.c',
     '../lib/tran_pipe.c',
     '../lib/tran_sock.c',
+    '../lib/sec_disagg.c',
 ]
 
 unit_tests_deps = [
     json_c_dep,
     cmocka_dep,
     dl_dep,
+    openssl_dep,
 ]
 unit_tests_cflags = [
     '-DUNIT_TEST',

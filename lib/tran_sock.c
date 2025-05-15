@@ -49,6 +49,7 @@
 #include <string.h>
 
 #include "tran_sock.h"
+#include "sec_disagg.h"
 #include "dma.h"
 
 typedef struct {
@@ -971,8 +972,7 @@ void* run_vsock_app(void *arg)
 #define WRITE_DOORBELL_OFFSET 1
 #define DOORBELL_SIZE 1  // 1 byte for each doorbell
 #define TOTAL_DOORBELL_SIZE (DOORBELL_SIZE * 2)
-#define MMIO_REGION_SIZE (sizeof(struct guest_message_header)) // there is either a header or a memory operand (here max. 8 Byte) in MMIO region
-#define DMA_PROXY_ADDRESS_OFFSET (((TOTAL_DOORBELL_SIZE + MMIO_REGION_SIZE + 7) >> 3) << 3) // 8 Byte aligned
+#define DMA_PROXY_ADDRESS_OFFSET (256) // 8 Byte aligned
 #define DMA_REGION_OFFSET (1 << 12) // 4K aligned
 #define DMA_SIZE (SHMEM_SIZE - DMA_REGION_OFFSET)
 
@@ -1059,8 +1059,9 @@ static ssize_t ivshmem_read(void *buf, size_t count, off_t offset) {
     if (offset + count > SHMEM_SIZE - TOTAL_DOORBELL_SIZE)
         count = SHMEM_SIZE - TOTAL_DOORBELL_SIZE - offset;
 
-    memcpy(buf, shmem + TOTAL_DOORBELL_SIZE + offset, count);
-    return count;
+    memcpy(disagg_crypto_global.buf, shmem + TOTAL_DOORBELL_SIZE + offset, disagg_crypto_global.adlen + count + disagg_crypto_global.authsize);
+
+    return disagg_mmio_decrypt(buf, count);
 }
 
 static ssize_t ivshmem_write(void *buf, size_t count, off_t offset) {
@@ -1072,7 +1073,12 @@ static ssize_t ivshmem_write(void *buf, size_t count, off_t offset) {
 
     wait_for_read_doorbell_clear();
 
-    memcpy(shmem + TOTAL_DOORBELL_SIZE + offset, buf, count);
+    void *enc_buf = disagg_mmio_encrypt(buf, count);
+    if (!enc_buf) {
+	return 0;
+    }
+
+    memcpy(shmem + TOTAL_DOORBELL_SIZE + offset, enc_buf, disagg_crypto_global.adlen + count + disagg_crypto_global.authsize);
 
     __atomic_store_n(read_doorbell, 1, __ATOMIC_RELEASE);
 
@@ -1142,6 +1148,10 @@ void *run_shmem_app(void* arg) {
     if (init_shared_memory() < 0) {
         printf("SHMEM: init_shared_memory failed\n");
         // return;
+    }
+    
+    if (disagg_init_crypto()) {
+	printf("SHMEM: disagg_init_crypto failed\n");
     }
 
     disagg_pci_dev_info *vsock_pci_info = (disagg_pci_dev_info*) arg;

@@ -1174,14 +1174,18 @@ void *run_shmem_app(void* arg) {
             continue;
         }
 
+#ifdef CONFIG_DISAGG_DEBUG_MMIO
         printf("Received message: operation=%u, address=0x%lx, length=%u\n",
                header.operation, header.address, header.length);
+#endif
 
         switch (header.operation)
         {
         case OP_READ:
             // Simulate reading data from the specified address
+#ifdef CONFIG_DISAGG_DEBUG_MMIO
             printf("tran_sock.c: OP_READ: Received read operation: Address 0x%lx, Length %u\n", header.address, header.length);
+#endif
             data = realloc(data, header.length);
             if (data == NULL)
             {
@@ -1190,7 +1194,9 @@ void *run_shmem_app(void* arg) {
             }
 
             int pci_region = get_pci_region(vsock_pci_info, header.address, header.length);
+#ifdef CONFIG_DISAGG_DEBUG_MMIO
             printf("tran_sock.c: OP_READ: Got PCI region: %d\n", pci_region);
+#endif
             vfu_region_access_cb_t *cb = vsock_pci_info->vctx->reg_info[pci_region].cb;
 
             loff_t offset = header.address -  *(vsock_pci_info->regions[pci_region].addr);
@@ -1203,7 +1209,9 @@ void *run_shmem_app(void* arg) {
                 memset(data, 'A', header.length);
             }
 
+#ifdef CONFIG_DISAGG_DEBUG_MMIO
             printf("tran_sock.c: OP_READ: Read data: ");
+#endif
             for (uint32_t i = 0; i < header.length; i++)
             {
                 printf("%02X", ((uint8_t *)data)[i]);
@@ -1218,7 +1226,9 @@ void *run_shmem_app(void* arg) {
             // break;
 
         case OP_WRITE:
+#ifdef CONFIG_DISAGG_DEBUG_MMIO
             printf("tran_sock.c: OP_WRITE: Received write operation: Address 0x%lx, Length %u\n", header.address, header.length);
+#endif
             data = realloc(data, header.length);
             if (data == NULL)
             {
@@ -1234,7 +1244,9 @@ void *run_shmem_app(void* arg) {
             pci_region = get_pci_region(vsock_pci_info, header.address, header.length);
             cb = vsock_pci_info->vctx->reg_info[pci_region].cb;
 
+#ifdef CONFIG_DISAGG_DEBUG_MMIO
             printf("tran_sock.c: OP_WRITE: Write data: ");
+#endif
             for (uint32_t i = 0; i < header.length; i++)
             {
                 printf("%02X", ((uint8_t *)data)[i]);

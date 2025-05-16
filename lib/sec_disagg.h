@@ -11,7 +11,7 @@ struct disagg_crypto {
     int keylen;
     unsigned char *iv;
     size_t ivlen;
-    uint64_t counter;
+    uint64_t *counter;
     int authsize;
     size_t adlen;
 };

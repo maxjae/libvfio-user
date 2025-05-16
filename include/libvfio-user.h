@@ -60,6 +60,10 @@
 extern "C" {
 #endif
 
+// Macros to enable debug messages for disagg
+#define CONFIG_DISAGG_DEBUG_MMIO_SEC 1
+#define CONFIG_DISAGG_DEBUG_MMIO 1
+
 #define LIB_VFIO_USER_MAJOR 0
 #define LIB_VFIO_USER_MINOR 1
 

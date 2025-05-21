@@ -159,6 +159,11 @@ tran_sock_msg_fds(int sock, uint16_t msg_id,
 #define OP_WRITE 2
 
 /**
+ * @brief Operation code for initial DMA requests
+ */
+#define DISAGG_DEV_OP_DMA_MAP 3
+
+/**
  * @brief Structure representing the message header
  */
 struct guest_message_header

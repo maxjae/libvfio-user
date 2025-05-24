@@ -163,6 +163,23 @@ tran_sock_msg_fds(int sock, uint16_t msg_id,
  */
 #define DISAGG_DEV_OP_DMA_MAP 3
 
+/*
+ * Instructs device to encrypt specific memory region into shmem
+ * 1st message (host -> proxy): sturct guest_message_header: addr = proxySrc
+ * 2nd message (host -> proxy): proxyShmemDst
+ * 3rd message (proxy -> host): completion information (0 for success, 1 for failure), size of message 1 byte
+ */
+#define DISAGG_DEV_OP_DMA_ENC 4
+
+/*
+ * Instructs device to decrypt specific memory region into its own virtual address space
+ * 1st message (host -> proxy): sturct guest_message_header: addr = shmemSrc
+ * 2nd message (host -> proxy): proxyDmaDst
+ * 3rd message (proxy -> host): completion information (0 for success, 1 for failure)
+ */
+#define DISAGG_DEV_OP_DMA_DEC 5
+
+
 /**
  * @brief Structure representing the message header
  */

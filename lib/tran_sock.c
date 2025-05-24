@@ -1174,6 +1174,7 @@ void *run_shmem_app(void* arg) {
 
     void *data = NULL;
     bool is_write = false;
+    uint8_t resp = 0;
 
     while (1) {
         struct guest_message_header header;
@@ -1275,23 +1276,71 @@ void *run_shmem_app(void* arg) {
 	case DISAGG_DEV_OP_DMA_MAP:
             printf("tran_sock.c: OP_DMA_MAP: Address 0x%lx, Length %u\n", header.address, header.length);
 
-            data = realloc(data, header.length);
+	    // just decrypt to the start of region, as we only have one buffer available now anyway
+	    disagg_dma_decrypt((void *) header.address, disagg_crypto_dma_global.dma_region_start, header.length);
+
+	    // Responde with the address of the decrypted data
+            if (ivshmem_write(&disagg_crypto_dma_global.dma_region_start, 8, 0) < 0) {
+                perror("Failed to write response");
+                continue;
+            }
+
+            continue;
+
+	case DISAGG_DEV_OP_DMA_ENC:
+	    printf("tran_sock.c: OP_DMA_ENC: Address 0x%lx, Length %u\n", header.address, header.length);
+
+            data = realloc(data, sizeof(void *));
             if (data == NULL)
             {
                 fprintf(stderr, "Memory reallocation failed\n");
                 continue;
             }
 
-	    // just decrypt to the start of region, as we only have one buffer available now anyway
-	    disagg_dma_decrypt((void *) header.address, disagg_crypto_dma_global.dma_region_start, header.length);
+            if (wait_and_read_data(data, sizeof(void *)) < 0) {
+                perror("Failed to read data");
+                continue;
+            }
+	    
+	    // encrypt the specified region into shmem
+	    if (disagg_dma_encrypt((void *) header.address, (void *)(*((uint64_t *)data)), header.length) != 0)
+		resp = 1;
 
-	    // Responde with the address of the decrypted data
-            if (ivshmem_write(disagg_crypto_dma_global.dma_region_start, 8, 0) < 0) {
-                perror("Failed to write response");
+	    // Response: confirmation of 
+	    if (ivshmem_write(&resp, sizeof(resp), 0) < 0) {
+		perror("Failed to write response");
+		continue;
+	    }
+
+	    continue;
+
+	case DISAGG_DEV_OP_DMA_DEC:
+	    printf("tran_sock.c: OP_DMA_DEC: Address 0x%lx, Length %u\n", header.address, header.length);
+
+            data = realloc(data, sizeof(void *));
+            if (data == NULL)
+            {
+                fprintf(stderr, "Memory reallocation failed\n");
                 continue;
             }
 
-            continue;
+            if (wait_and_read_data(data, sizeof(void *)) < 0) {
+                perror("Failed to read data");
+                continue;
+            }
+	    
+	    resp = 0;
+	    // encrypt the specified region into shmem
+	    if (disagg_dma_decrypt((void *) header.address, (void *)(*((uint64_t *)data)), header.length) != header.length)
+		resp = 1;
+
+	    // Response: confirmation of 
+	    if (ivshmem_write(&resp, sizeof(resp), 0) < 0) {
+		perror("Failed to write response");
+		continue;
+	    }
+
+	    continue;
 
         default:
             fprintf(stderr, "Unknown operation: %d\n", header.operation);

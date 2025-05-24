@@ -7,7 +7,9 @@
 #include <openssl/evp.h>
 #include <openssl/core_names.h>
 
-#ifdef CONFIG_DISAGG_DEBUG_MMIO_SEC
+#define CONFIG_DISAGG_DEBUG_DMA_SEC
+
+#ifdef CONFIG_DISAGG_DEBUG_DMA_SEC
 static void print_bytes(void *buf, size_t count) {
     unsigned char *bytes = buf;
     for (size_t i = 0; i < count; ++i)
@@ -23,12 +25,12 @@ size_t disagg_dma_decrypt(void *from, void *to, size_t count) {
     printf("disagg_dma_decrypt:\n");
     printf("counter: %lu\n"
 	    "Whole message: 0x", *disagg_crypto_dma_global.counter);
-    print_bytes(disagg_crypto_dma_global.buf, disagg_crypto_dma_global.adlen + count + disagg_crypto_dma_global.authsize);
+    print_bytes(from, count + disagg_crypto_dma_global.authsize);
     printf("\ncipher-size (only encrypted data): %ld\n"
 	    "ciphertext: 0x", count);
-    print_bytes(disagg_crypto_dma_global.buf + disagg_crypto_dma_global.adlen, count);
+    print_bytes(from,  count);
     printf("\nAuth Tag: 0x");
-    print_bytes(disagg_crypto_dma_global.buf + disagg_crypto_dma_global.adlen + count, disagg_crypto_dma_global.authsize);
+    print_bytes(from + count, disagg_crypto_dma_global.authsize);
 #endif
 
     EVP_CIPHER_CTX *ctx = NULL;
@@ -66,7 +68,7 @@ size_t disagg_dma_decrypt(void *from, void *to, size_t count) {
 
 #ifdef CONFIG_DISAGG_DEBUG_DMA_SEC
     printf("\nPlaintext: 0x");
-    print_bytes(buf, count);
+    print_bytes(to, count);
     printf("\n\n");
 #endif
 
@@ -90,9 +92,7 @@ err:
 size_t disagg_mmio_decrypt(void *buf, size_t count) {
 #ifdef CONFIG_DISAGG_DEBUG_MMIO_SEC
     printf("disagg_mmio_decrypt:\n");
-    printf("counter: %lu\n"
-	    "Whole message: 0x", *disagg_crypto_mmio_global.counter);
-    print_bytes(disagg_crypto_mmio_global.buf, disagg_crypto_mmio_global.adlen + count + disagg_crypto_mmio_global.authsize);
+    printf("counter: %lu\n" , *disagg_crypto_mmio_global.counter);
     printf("\ncipher-size (only encrypted data): %ld\n"
 	    "ciphertext: 0x", count);
     print_bytes(disagg_crypto_mmio_global.buf + disagg_crypto_mmio_global.adlen, count);
@@ -167,7 +167,7 @@ int disagg_dma_encrypt(void *from, void *to, size_t count) {
     printf("disagg_dma_encrypt:\n");
     printf("counter: %lu\n", *disagg_crypto_dma_global.counter);
     printf("Plaintext: 0x");
-    print_bytes(buf, count);
+    print_bytes(from, count);
     printf("\n");
 #endif
 
@@ -186,7 +186,7 @@ int disagg_dma_encrypt(void *from, void *to, size_t count) {
     
     // Set key and iv for both ctxs and ciphers
     params[0] = OSSL_PARAM_construct_size_t(OSSL_CIPHER_PARAM_AEAD_IVLEN, &disagg_crypto_dma_global.ivlen);
-    if (!EVP_EncryptInit_ex2(ctx, cipher, disagg_crypto_dma_global.key, disagg_crypto_mmio_global.iv, params)) {
+    if (!EVP_EncryptInit_ex2(ctx, cipher, disagg_crypto_dma_global.key, disagg_crypto_dma_global.iv, params)) {
 	printf("Error: EncryptInit failed\n");
 	goto err;
     }
@@ -206,7 +206,7 @@ int disagg_dma_encrypt(void *from, void *to, size_t count) {
     // Write Authentication code into output buf
     disagg_crypto_dma_global.authsize = 16;
     params[0] = OSSL_PARAM_construct_octet_string(OSSL_CIPHER_PARAM_AEAD_TAG, 
-	    (unsigned char *) to + count, disagg_crypto_mmio_global.authsize);
+	    (unsigned char *) to + count, disagg_crypto_dma_global.authsize);
     if (!EVP_CIPHER_CTX_get_params(ctx, params)) {
 	printf("disagg_dma_encrypt: get_params for auth tag failed\n");
 	goto err;
@@ -215,9 +215,9 @@ int disagg_dma_encrypt(void *from, void *to, size_t count) {
 #ifdef CONFIG_DISAGG_DEBUG_DMA_SEC
     printf("cipher-size (only encrypted data): %ld\n"
 	    "ciphertext: 0x", count);
-    print_bytes(disagg_crypto_dma_global.buf, count);
+    print_bytes(to, count);
     printf("\nAuth Tag: 0x");
-    print_bytes(disagg_crypto_dma_global.buf + count, disagg_crypto_mmio_global.authsize);
+    print_bytes(to + count, disagg_crypto_dma_global.authsize);
     printf("\n\n");
 #endif
 

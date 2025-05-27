@@ -1029,16 +1029,13 @@ static int init_shared_memory() {
     *read_doorbell = 0;
     *write_doorbell = 0;
 
-    // Write dma address into shmem
-    *((uint64_t *)(shmem + DMA_PROXY_ADDRESS_OFFSET)) = (uint64_t) shmem + DMA_REGION_OFFSET;
-
     // alloc region for decryption of dma requests
     void *dma_dec = malloc(DMA_SIZE); 
     if (dma_dec == NULL) {
 	printf("malloc for big DMA region failed\n");
 	return -1;
     }
-    disagg_crypto_dma_global.dma_region_start = dma_dec;
+    disagg_crypto_dma_global.proxyDMA_start = dma_dec;
 
     msync(shmem, TOTAL_DOORBELL_SIZE, MS_SYNC);
     
@@ -1112,7 +1109,7 @@ static int disagg_register_dma_region(struct vfu_ctx *vctx) {
     dma_controller_t *dma_contr = vctx->dma;
     vfu_dma_info_t info;
 
-    ret = dma_controller_add_region(vctx->dma, (void *) disagg_crypto_dma_global.dma_region_start,
+    ret = dma_controller_add_region(vctx->dma, (void *) disagg_crypto_dma_global.proxyDMA_start,
 				  DMA_SIZE, -1, 0,
 				  PROT_READ | PROT_WRITE);
 
@@ -1124,10 +1121,10 @@ static int disagg_register_dma_region(struct vfu_ctx *vctx) {
     // search for our region in the dma controller's regions to add information about the mapping
     dma_memory_region_t *region = NULL;
     for (int i = 0; i < dma_contr->nregions; ++i) {
-	if (dma_contr->regions[i].info.iova.iov_base == disagg_crypto_dma_global.dma_region_start) {
+	if (dma_contr->regions[i].info.iova.iov_base == disagg_crypto_dma_global.proxyDMA_start) {
 	    region = &(dma_contr->regions[i]);
-	    region->info.vaddr = disagg_crypto_dma_global.dma_region_start;
-	    region->info.mapping.iov_base = disagg_crypto_dma_global.dma_region_start;
+	    region->info.vaddr = disagg_crypto_dma_global.proxyDMA_start;
+	    region->info.mapping.iov_base = disagg_crypto_dma_global.proxyDMA_start;
 	    region->info.mapping.iov_len = DMA_SIZE;
 	}
     }
@@ -1136,10 +1133,10 @@ static int disagg_register_dma_region(struct vfu_ctx *vctx) {
     // Now register the region to tell where it is mapped to
     // (this means we woudln't actually need to share the virtual address,
     // and could do it more simple, because we share the same address twice)
-    info.iova.iov_base =disagg_crypto_dma_global.dma_region_start; // guest DMA address
+    info.iova.iov_base =disagg_crypto_dma_global.proxyDMA_start; // guest DMA address
     info.iova.iov_len = DMA_SIZE;
-    info.vaddr = disagg_crypto_dma_global.dma_region_start; // mapped address
-    info.mapping.iov_base = disagg_crypto_dma_global.dma_region_start;
+    info.vaddr = disagg_crypto_dma_global.proxyDMA_start; // mapped address
+    info.mapping.iov_base = disagg_crypto_dma_global.proxyDMA_start;
     info.mapping.iov_len = DMA_SIZE;
     info.page_size = 1 << 12;
     info.prot = PROT_READ | PROT_WRITE; // same as in mmap call
@@ -1151,6 +1148,12 @@ static int disagg_register_dma_region(struct vfu_ctx *vctx) {
     return 0;
 }
 
+static void *proxyDMA_to_proxyShmem(void *proxyDMA) {
+    if (disagg_crypto_dma_global.proxyDMA_start > shmem)
+	return proxyDMA - (disagg_crypto_dma_global.proxyDMA_start - DMA_REGION_OFFSET - shmem);
+    else
+	return proxyDMA + (shmem - disagg_crypto_dma_global.proxyDMA_start + DMA_REGION_OFFSET);
+}
 
 void *run_shmem_app(void* arg) {
     if (init_shared_memory() < 0) {
@@ -1277,10 +1280,10 @@ void *run_shmem_app(void* arg) {
             printf("tran_sock.c: OP_DMA_MAP: Address 0x%lx, Length %u\n", header.address, header.length);
 
 	    // just decrypt to the start of region, as we only have one buffer available now anyway
-	    disagg_dma_decrypt((void *) header.address, disagg_crypto_dma_global.dma_region_start, header.length);
+	    disagg_dma_decrypt(proxyDMA_to_proxyShmem((void *) header.address), disagg_crypto_dma_global.proxyDMA_start, header.length);
 
 	    // Responde with the address of the decrypted data
-            if (ivshmem_write(&disagg_crypto_dma_global.dma_region_start, 8, 0) < 0) {
+            if (ivshmem_write(&resp, sizeof(resp), 0) < 0) {
                 perror("Failed to write response");
                 continue;
             }
@@ -1290,20 +1293,8 @@ void *run_shmem_app(void* arg) {
 	case DISAGG_DEV_OP_DMA_ENC:
 	    printf("tran_sock.c: OP_DMA_ENC: Address 0x%lx, Length %u\n", header.address, header.length);
 
-            data = realloc(data, sizeof(void *));
-            if (data == NULL)
-            {
-                fprintf(stderr, "Memory reallocation failed\n");
-                continue;
-            }
-
-            if (wait_and_read_data(data, sizeof(void *)) < 0) {
-                perror("Failed to read data");
-                continue;
-            }
-	    
 	    // encrypt the specified region into shmem
-	    if (disagg_dma_encrypt((void *) header.address, (void *)(*((uint64_t *)data)), header.length) != 0)
+	    if (disagg_dma_encrypt((void *) header.address, proxyDMA_to_proxyShmem((void *) header.address), header.length) != 0)
 		resp = 1;
 
 	    // Response: confirmation of 
@@ -1317,25 +1308,31 @@ void *run_shmem_app(void* arg) {
 	case DISAGG_DEV_OP_DMA_DEC:
 	    printf("tran_sock.c: OP_DMA_DEC: Address 0x%lx, Length %u\n", header.address, header.length);
 
-            data = realloc(data, sizeof(void *));
-            if (data == NULL)
-            {
-                fprintf(stderr, "Memory reallocation failed\n");
-                continue;
-            }
-
-            if (wait_and_read_data(data, sizeof(void *)) < 0) {
-                perror("Failed to read data");
-                continue;
-            }
-	    
 	    resp = 0;
 	    // encrypt the specified region into shmem
-	    if (disagg_dma_decrypt((void *) header.address, (void *)(*((uint64_t *)data)), header.length) != header.length)
+	    if (disagg_dma_decrypt(proxyDMA_to_proxyShmem((void *) header.address), (void *) header.address, header.length) != header.length)
 		resp = 1;
 
-	    // Response: confirmation of 
+	    // Response: confirmation of completion
 	    if (ivshmem_write(&resp, sizeof(resp), 0) < 0) {
+		perror("Failed to write response");
+		continue;
+	    }
+
+	    continue;
+
+	case DISAGG_DEV_OP_ADDR_INIT:
+	    printf("tran_sock.c: OP_ADDR_INIT\n");
+
+	    data = realloc(data, sizeof(void *) * 2);
+	    if (data == NULL) {
+		fprintf(stderr, "Memory reallocation failed\n");
+		continue;
+	    }
+
+	    *((void **) data) = disagg_crypto_dma_global.proxyDMA_start;
+
+	    if (ivshmem_write(data, sizeof(void *), 0) < 0) {
 		perror("Failed to write response");
 		continue;
 	    }

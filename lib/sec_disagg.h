@@ -17,7 +17,7 @@ struct disagg_crypto_mmio {
 };
 
 struct disagg_crypto_dma {
-    void *dma_region_start;
+    void *proxyDMA_start;
     unsigned char *key;
     int keylen;
     unsigned char *iv;
@@ -31,6 +31,7 @@ extern struct disagg_crypto_mmio disagg_crypto_mmio_global;
 extern struct disagg_crypto_dma disagg_crypto_dma_global;
 
 int disagg_init_crypto();
+
 void *disagg_mmio_encrypt(void *buf, size_t count);
 
 // Expects the encrypted input in disagg_crypto_global.buf

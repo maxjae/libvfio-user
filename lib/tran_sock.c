@@ -1223,12 +1223,12 @@ void *run_shmem_app(void* arg) {
 
 #ifdef CONFIG_DISAGG_DEBUG_MMIO
             printf("tran_sock.c: OP_READ: Read data: ");
-#endif
             for (uint32_t i = 0; i < header.length; i++)
             {
                 printf("%02X", ((uint8_t *)data)[i]);
             }
             printf("\n");
+#endif
 
             if (ivshmem_write(data, header.length, 0) < 0) {
                 perror("Failed to write response");
@@ -1258,12 +1258,12 @@ void *run_shmem_app(void* arg) {
 
 #ifdef CONFIG_DISAGG_DEBUG_MMIO
             printf("tran_sock.c: OP_WRITE: Write data: ");
-#endif
             for (uint32_t i = 0; i < header.length; i++)
             {
                 printf("%02X", ((uint8_t *)data)[i]);
             }
             printf("\n");
+#endif
 
             offset = header.address -  *(vsock_pci_info->regions[pci_region].addr);
             is_write = true;
@@ -1277,7 +1277,9 @@ void *run_shmem_app(void* arg) {
             continue;
 
 	case DISAGG_DEV_OP_DMA_MAP:
+#ifdef CONFIG_DISAGG_DEBUG_DMA_SEC
             printf("tran_sock.c: OP_DMA_MAP: Address 0x%lx, Length %u\n", header.address, header.length);
+#endif
 
 	    // just decrypt to the start of region, as we only have one buffer available now anyway
 	    disagg_dma_decrypt(proxyDMA_to_proxyShmem((void *) header.address), disagg_crypto_dma_global.proxyDMA_start, header.length);
@@ -1291,7 +1293,9 @@ void *run_shmem_app(void* arg) {
             continue;
 
 	case DISAGG_DEV_OP_DMA_ENC:
+#ifdef CONFIG_DISAGG_DEBUG_DMA_SEC
 	    printf("tran_sock.c: OP_DMA_ENC: Address 0x%lx, Length %u\n", header.address, header.length);
+#endif
 
 	    // encrypt the specified region into shmem
 	    if (disagg_dma_encrypt((void *) header.address, proxyDMA_to_proxyShmem((void *) header.address), header.length) != 0)
@@ -1306,7 +1310,9 @@ void *run_shmem_app(void* arg) {
 	    continue;
 
 	case DISAGG_DEV_OP_DMA_DEC:
+#ifdef CONFIG_DISAGG_DEBUG_DMA_SEC
 	    printf("tran_sock.c: OP_DMA_DEC: Address 0x%lx, Length %u\n", header.address, header.length);
+#endif
 
 	    resp = 0;
 	    // encrypt the specified region into shmem

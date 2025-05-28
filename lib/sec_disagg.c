@@ -7,8 +7,6 @@
 #include <openssl/evp.h>
 #include <openssl/core_names.h>
 
-#define CONFIG_DISAGG_DEBUG_DMA_SEC
-
 #ifdef CONFIG_DISAGG_DEBUG_DMA_SEC
 static void print_bytes(void *buf, size_t count) {
     unsigned char *bytes = buf;

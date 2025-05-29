@@ -1282,7 +1282,7 @@ void *run_shmem_app(void* arg) {
 #endif
 
 	    // just decrypt to the start of region, as we only have one buffer available now anyway
-	    disagg_dma_decrypt(proxyDMA_to_proxyShmem((void *) header.address), disagg_crypto_dma_global.proxyDMA_start, header.length);
+	    disagg_dma_decrypt(proxyDMA_to_proxyShmem((void *) header.address), (void *) header.address, header.length);
 
 	    // Responde with the address of the decrypted data
             if (ivshmem_write(&resp, sizeof(resp), 0) < 0) {

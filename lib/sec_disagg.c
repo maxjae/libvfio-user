@@ -31,38 +31,7 @@ size_t disagg_dma_decrypt(void *from, void *to, size_t count) {
     print_bytes(from + count, disagg_crypto_dma_global.authsize);
 #endif
 
-    EVP_CIPHER_CTX *ctx = NULL;
-    EVP_CIPHER *cipher = NULL;
-    int outlen;
-    OSSL_PARAM params[2] = {OSSL_PARAM_END, OSSL_PARAM_END};
-
-    if (!(ctx = EVP_CIPHER_CTX_new())) { 
-	goto err;
-    }
-
-    if (!(cipher = EVP_CIPHER_fetch(NULL, "AES-256-GCM", NULL))) {
-	goto err;
-    }
-    
-    // Set key and iv
-    params[0] = OSSL_PARAM_construct_size_t(OSSL_CIPHER_PARAM_AEAD_IVLEN, &disagg_crypto_dma_global.ivlen);
-    if (!EVP_DecryptInit_ex2(ctx, cipher, disagg_crypto_dma_global.key, disagg_crypto_dma_global.iv, params)) {
-	printf("Error: DecryptInit failed\n");
-	goto err;
-    }
-
-    // Set the ciphertext
-    if (!EVP_DecryptUpdate(ctx, to, &outlen, from, count)) {
-	printf("disagg_dma_decrypt: DecryptUdpate failed\n");
-	goto err;
-    }
-
-    // Set auth tag
-    params[0] = OSSL_PARAM_construct_octet_string(OSSL_CIPHER_PARAM_AEAD_TAG, (unsigned char *) from + count, disagg_crypto_dma_global.authsize);
-    if (!EVP_CIPHER_CTX_set_params(ctx, params)) {
-	printf("disagg_dma_decrypt: set_params failed\n");
-	goto err;
-    }
+    memcpy(to, from, count);
 
 #ifdef CONFIG_DISAGG_DEBUG_DMA_SEC
     printf("\nPlaintext: 0x");
@@ -70,21 +39,7 @@ size_t disagg_dma_decrypt(void *from, void *to, size_t count) {
     printf("\n\n");
 #endif
 
-    // Finalise and check if auth tag matches
-    if (EVP_DecryptFinal_ex(ctx, to, &outlen) <= 0) {
-	printf("\ndisagg_dma_decrypt: AUTH failed\n");
-	goto err;
-    }
-
-    ++(*disagg_crypto_dma_global.counter);
-
     return count;
-err:
-    if (cipher)
-	EVP_CIPHER_free(cipher);
-    if (ctx)
-	EVP_CIPHER_CTX_free(ctx);
-    return 0;
 }
 
 size_t disagg_mmio_decrypt(void *buf, size_t count) {
@@ -169,46 +124,7 @@ int disagg_dma_encrypt(void *from, void *to, size_t count) {
     printf("\n");
 #endif
 
-    EVP_CIPHER_CTX *ctx = NULL;
-    EVP_CIPHER *cipher = NULL;
-    int outlen;
-    OSSL_PARAM params[2] = {OSSL_PARAM_END, OSSL_PARAM_END};
-
-    if (!(ctx = EVP_CIPHER_CTX_new())) { 
-	goto err;
-    }
-
-    if (!(cipher = EVP_CIPHER_fetch(NULL, "AES-256-GCM", NULL))) {
-	goto err;
-    }
-    
-    // Set key and iv for both ctxs and ciphers
-    params[0] = OSSL_PARAM_construct_size_t(OSSL_CIPHER_PARAM_AEAD_IVLEN, &disagg_crypto_dma_global.ivlen);
-    if (!EVP_EncryptInit_ex2(ctx, cipher, disagg_crypto_dma_global.key, disagg_crypto_dma_global.iv, params)) {
-	printf("Error: EncryptInit failed\n");
-	goto err;
-    }
-
-    // Set the plaintext
-    if (!EVP_EncryptUpdate(ctx, to, &outlen, from, count)) {
-	printf("disagg_dma_encrypt: EncryptUdpate failed\n");
-	goto err;
-    }
-
-    // Finalise
-    if (!EVP_EncryptFinal_ex(ctx, NULL, &outlen)) {
-	printf("disagg_dma_encrypt: EncryptFinal failed\n");
-	goto err;
-    }
-
-    // Write Authentication code into output buf
-    disagg_crypto_dma_global.authsize = 16;
-    params[0] = OSSL_PARAM_construct_octet_string(OSSL_CIPHER_PARAM_AEAD_TAG, 
-	    (unsigned char *) to + count, disagg_crypto_dma_global.authsize);
-    if (!EVP_CIPHER_CTX_get_params(ctx, params)) {
-	printf("disagg_dma_encrypt: get_params for auth tag failed\n");
-	goto err;
-    }
+    memcpy(to, from, count);
 
 #ifdef CONFIG_DISAGG_DEBUG_DMA_SEC
     printf("cipher-size (only encrypted data): %ld\n"
@@ -219,14 +135,7 @@ int disagg_dma_encrypt(void *from, void *to, size_t count) {
     printf("\n\n");
 #endif
 
-    ++(*disagg_crypto_dma_global.counter);
     return 0;
-err:
-    if (cipher)
-	EVP_CIPHER_free(cipher);
-    if (ctx)
-	EVP_CIPHER_CTX_free(ctx);
-    return -1;
 }
 
 void *disagg_mmio_encrypt(void *buf, size_t count) {

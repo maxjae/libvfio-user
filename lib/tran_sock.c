@@ -1064,9 +1064,8 @@ static ssize_t ivshmem_read(void *buf, size_t count, off_t offset) {
     if (offset + count > SHMEM_SIZE - TOTAL_DOORBELL_SIZE)
         count = SHMEM_SIZE - TOTAL_DOORBELL_SIZE - offset;
 
-    memcpy(disagg_crypto_mmio_global.buf, shmem + TOTAL_DOORBELL_SIZE + offset, disagg_crypto_mmio_global.adlen + count + disagg_crypto_mmio_global.authsize);
-
-    return disagg_mmio_decrypt(buf, count);
+    memcpy(buf, shmem + TOTAL_DOORBELL_SIZE + offset, count);
+    return count;
 }
 
 static ssize_t ivshmem_write(void *buf, size_t count, off_t offset) {
@@ -1078,12 +1077,7 @@ static ssize_t ivshmem_write(void *buf, size_t count, off_t offset) {
 
     wait_for_read_doorbell_clear();
 
-    void *enc_buf = disagg_mmio_encrypt(buf, count);
-    if (!enc_buf) {
-	return 0;
-    }
-
-    memcpy(shmem + TOTAL_DOORBELL_SIZE + offset, enc_buf, disagg_crypto_mmio_global.adlen + count + disagg_crypto_mmio_global.authsize);
+    memcpy(shmem + TOTAL_DOORBELL_SIZE + offset, buf, count);
 
     __atomic_store_n(read_doorbell, 1, __ATOMIC_RELEASE);
 
